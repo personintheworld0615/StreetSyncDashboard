@@ -1,5 +1,4 @@
 export type ReportStatus = "Open" | "In Progress" | "Resolved";
-export type ReportSeverity = "low" | "medium" | "high";
 
 export type Report = {
   id: number;
@@ -11,7 +10,6 @@ export type Report = {
   location: string;
   image?: string | null;
   time: string;
-  severity: ReportSeverity;
   status: ReportStatus;
   user_id: number;
   isDraft: boolean;
@@ -19,6 +17,17 @@ export type Report = {
   synthetic?: boolean;
 };
 
+/** Row from Supabase `updates` (status change and/or staff comment). */
+export type ReportUpdate = {
+  id: number;
+  report_id: number;
+  user_id: number;
+  report_title: string;
+  old_status: ReportStatus;
+  new_status: ReportStatus;
+  comment: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+
 export type StatusFilter = "all" | ReportStatus;
-export type ViewMode = "map" | "list";
-export type MapMode = "pins" | "heatmap";

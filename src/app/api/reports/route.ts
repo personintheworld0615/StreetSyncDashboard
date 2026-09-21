@@ -14,7 +14,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("reports")
     .select(
-      "id, title, description, category, latitude, longitude, location, image, severity, status, is_draft, time, user_id"
+      "id, title, description, category, latitude, longitude, location, image, status, is_draft, time, user_id"
     )
     .eq("is_draft", false)
     .order("time", { ascending: false });

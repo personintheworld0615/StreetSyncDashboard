@@ -9,10 +9,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Flame, List, Map as MapIcon, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { StatusMetrics } from "@/components/dashboard/status-metrics";
 import { ReportsList } from "@/components/dashboard/reports-list";
-import { ReportsTable } from "@/components/dashboard/reports-table";
 import { ReportsMapLazy } from "@/components/dashboard/reports-map-lazy";
 import { ReportDetail } from "@/components/dashboard/report-detail";
 import {
@@ -20,15 +19,23 @@ import {
   countByStatus,
 } from "@/lib/data/reports";
 import { categoryLabel } from "@/lib/categories";
-import { fetchReports, updateReportStatus } from "@/lib/reports-api";
+import {
+  deleteReportUpdate,
+  editReportUpdate,
+  fetchReportUpdates,
+  fetchReports,
+  postReportUpdate,
+} from "@/lib/reports-api";
+import { reportTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type {
-  MapMode,
   Report,
   ReportStatus,
+  ReportUpdate,
   StatusFilter,
-  ViewMode,
 } from "@/lib/types";
+
+let demoUpdateSeq = 1000;
 
 export function DashboardApp() {
   const [reports, setReports] = useState<Report[]>([]);
@@ -38,10 +45,12 @@ export function DashboardApp() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [category, setCategory] = useState<string>("all");
   const [query, setQuery] = useState("");
-  const [viewMode, setViewMode] = useState<ViewMode>("map");
-  const [mapMode, setMapMode] = useState<MapMode>("pins");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [updatesByReport, setUpdatesByReport] = useState<
+    Record<number, ReportUpdate[]>
+  >({});
+  const [updatesLoading, setUpdatesLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,23 +111,171 @@ export function DashboardApp() {
   }, [reports, statusFilter, category, query]);
 
   const selected = reports.find((r) => r.id === selectedId) ?? null;
+  const selectedUpdates =
+    selectedId != null ? (updatesByReport[selectedId] ?? []) : [];
 
-  async function handleStatusChange(id: number, status: ReportStatus) {
+  const loadUpdates = useCallback(
+    async (reportId: number) => {
+      if (usingDemo) return;
+      setUpdatesLoading(true);
+      try {
+        const rows = await fetchReportUpdates(reportId);
+        setUpdatesByReport((prev) => ({ ...prev, [reportId]: rows }));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not load updates";
+        setLoadError(msg);
+      } finally {
+        setUpdatesLoading(false);
+      }
+    },
+    [usingDemo]
+  );
+
+  useEffect(() => {
+    if (selectedId == null) return;
     if (usingDemo) {
-      setReports((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status } : r))
+      setUpdatesByReport((prev) =>
+        prev[selectedId] ? prev : { ...prev, [selectedId]: [] }
       );
+      return;
+    }
+    void loadUpdates(selectedId);
+  }, [selectedId, usingDemo, loadUpdates]);
+
+  function applyReport(report: Report | null) {
+    if (!report) return;
+    setReports((prev) => prev.map((r) => (r.id === report.id ? report : r)));
+  }
+
+  function prependUpdate(reportId: number, update: ReportUpdate) {
+    setUpdatesByReport((prev) => ({
+      ...prev,
+      [reportId]: [update, ...(prev[reportId] ?? [])],
+    }));
+  }
+
+  async function handlePostUpdate(
+    id: number,
+    payload: { status?: ReportStatus; comment?: string | null }
+  ) {
+    const current = reports.find((r) => r.id === id);
+    if (!current) return;
+
+    const nextStatus = payload.status ?? current.status;
+    const comment = payload.comment?.trim() || null;
+
+    if (usingDemo) {
+      const update: ReportUpdate = {
+        id: ++demoUpdateSeq,
+        report_id: id,
+        user_id: current.user_id,
+        report_title: reportTitle(current),
+        old_status: current.status,
+        new_status: nextStatus,
+        comment,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      };
+      applyReport({ ...current, status: nextStatus });
+      prependUpdate(id, update);
       return;
     }
 
     setStatusSaving(true);
     try {
-      const updated = await updateReportStatus(id, status);
-      setReports((prev) =>
-        prev.map((r) => (r.id === id ? updated : r))
-      );
+      const result = await postReportUpdate(id, payload);
+      applyReport(result.report);
+      if (result.update) prependUpdate(id, result.update);
+      else await loadUpdates(id);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not update status";
+      const msg = e instanceof Error ? e.message : "Could not post update";
+      setLoadError(msg);
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function handleEditUpdate(
+    updateId: number,
+    payload: { comment?: string | null; new_status?: ReportStatus }
+  ) {
+    if (selectedId == null) return;
+
+    if (usingDemo) {
+      setUpdatesByReport((prev) => {
+        const list = prev[selectedId] ?? [];
+        return {
+          ...prev,
+          [selectedId]: list.map((u) =>
+            u.id === updateId
+              ? {
+                  ...u,
+                  comment:
+                    "comment" in payload
+                      ? payload.comment?.trim() || null
+                      : u.comment,
+                  new_status: payload.new_status ?? u.new_status,
+                }
+              : u
+          ),
+        };
+      });
+      if (payload.new_status) {
+        applyReport({
+          ...(reports.find((r) => r.id === selectedId) as Report),
+          status: payload.new_status,
+        });
+      }
+      return;
+    }
+
+    setStatusSaving(true);
+    try {
+      const result = await editReportUpdate(updateId, payload);
+      applyReport(result.report);
+      setUpdatesByReport((prev) => ({
+        ...prev,
+        [selectedId]: (prev[selectedId] ?? []).map((u) =>
+          u.id === updateId ? result.update : u
+        ),
+      }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not edit update";
+      setLoadError(msg);
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function handleDeleteUpdate(updateId: number) {
+    if (selectedId == null) return;
+
+    if (usingDemo) {
+      const list = updatesByReport[selectedId] ?? [];
+      const target = list.find((u) => u.id === updateId);
+      setUpdatesByReport((prev) => ({
+        ...prev,
+        [selectedId]: (prev[selectedId] ?? []).filter((u) => u.id !== updateId),
+      }));
+      if (target && target.old_status !== target.new_status) {
+        const current = reports.find((r) => r.id === selectedId);
+        if (current && current.status === target.new_status) {
+          applyReport({ ...current, status: target.old_status });
+        }
+      }
+      return;
+    }
+
+    setStatusSaving(true);
+    try {
+      const result = await deleteReportUpdate(updateId);
+      applyReport(result.report);
+      setUpdatesByReport((prev) => ({
+        ...prev,
+        [selectedId]: (prev[selectedId] ?? []).filter((u) => u.id !== updateId),
+      }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not delete update";
       setLoadError(msg);
     } finally {
       setStatusSaving(false);
@@ -134,7 +291,7 @@ export function DashboardApp() {
               StreetSync
             </p>
             <p className="mt-1 text-[12px] text-[#757575]">
-              Municipal ops · West Windsor, NJ
+              Municipal ops · Plainsboro, NJ
               {usingDemo && " · demo data"}
             </p>
           </div>
@@ -158,48 +315,6 @@ export function DashboardApp() {
               className="h-10 w-full rounded-full bg-[#EEF0F3] pr-4 pl-9 text-sm text-[#111827] outline-none placeholder:text-[#9CA3AF]"
             />
           </label>
-
-          <div className="flex items-center rounded-full bg-[#111827] p-1">
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode("map");
-                setMapMode("pins");
-              }}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold text-white",
-                viewMode === "map" && mapMode === "pins" && "bg-white/15"
-              )}
-            >
-              <MapIcon className="size-3.5" aria-hidden />
-              Pins
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode("map");
-                setMapMode("heatmap");
-              }}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold text-white",
-                viewMode === "map" && mapMode === "heatmap" && "bg-white/15"
-              )}
-            >
-              <Flame className="size-3.5" aria-hidden />
-              Heatmap
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("list")}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold text-white",
-                viewMode === "list" && "bg-white/15"
-              )}
-            >
-              <List className="size-3.5" aria-hidden />
-              Table
-            </button>
-          </div>
         </div>
 
         {(loadError || usingDemo) && (
@@ -272,29 +387,22 @@ export function DashboardApp() {
         </section>
 
         <section className="relative min-h-0 min-w-0 flex-1">
-          {viewMode === "map" ? (
-            <ReportsMapLazy
-              reports={filtered}
-              selectedId={selectedId}
-              mapMode={mapMode}
-              onSelect={setSelectedId}
-            />
-          ) : (
-            <div className="h-full overflow-auto bg-white">
-              <ReportsTable
-                reports={filtered}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
-            </div>
-          )}
+          <ReportsMapLazy
+            reports={filtered}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
         </section>
 
         {selected && (
           <ReportDetail
             report={selected}
+            updates={selectedUpdates}
+            updatesLoading={updatesLoading}
             onClose={() => setSelectedId(null)}
-            onStatusChange={handleStatusChange}
+            onPostUpdate={(payload) => handlePostUpdate(selected.id, payload)}
+            onEditUpdate={handleEditUpdate}
+            onDeleteUpdate={handleDeleteUpdate}
             saving={statusSaving}
           />
         )}

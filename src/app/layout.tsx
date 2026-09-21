@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "StreetSync — Municipal Ops",
   description:
-    "Triage citizen infrastructure reports: queue, map, and heatmap for municipal admins.",
+    "Triage citizen infrastructure reports: queue and map for municipal admins.",
 };
 
 export default function RootLayout({

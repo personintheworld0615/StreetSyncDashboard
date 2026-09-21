@@ -2,7 +2,7 @@
 
 import { ChevronRight } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { SeverityBadge, StatusBadge } from "@/components/dashboard/badges";
+import { StatusBadge } from "@/components/dashboard/badges";
 import { categoryIcon } from "@/lib/categories";
 import { formatAgo, reportTitle, shortLocation } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -50,8 +50,6 @@ export function ReportsList({ reports, selectedId, onSelect }: Props) {
                       <span className="truncate">
                         {shortLocation(report.location)}
                       </span>
-                      <span aria-hidden>·</span>
-                      <SeverityBadge severity={report.severity} />
                       <span aria-hidden>·</span>
                       <span className="shrink-0">{formatAgo(report.time)}</span>
                     </span>

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { MapMode, Report } from "@/lib/types";
+import type { Report } from "@/lib/types";
 
 const ReportsMapInner = dynamic(
   () =>
@@ -19,7 +19,6 @@ const ReportsMapInner = dynamic(
 type Props = {
   reports: Report[];
   selectedId: number | null;
-  mapMode: MapMode;
   onSelect: (id: number) => void;
 };
 
