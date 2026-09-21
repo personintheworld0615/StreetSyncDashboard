@@ -434,6 +434,44 @@ export async function downloadWorkOrderPdf(
     }
   }
 
+  // Signature / sign-off
+  const sigH = 126;
+  y = ensureSpace(doc, y, sigH + 28, margin);
+  drawSectionLabel(doc, "Sign-off", margin, y);
+  y += 10;
+  drawCard(doc, margin, y, contentWidth, sigH);
+
+  const sigGap = 24;
+  const sigColW = (contentWidth - 32 - sigGap) / 2;
+  const sigLeft = margin + 16;
+  const sigRight = sigLeft + sigColW + sigGap;
+  const sigLineY = y + 58;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  setText(doc, COLORS.soft);
+  doc.text("COMPLETED BY", sigLeft, y + 22);
+  doc.text("DATE", sigRight, y + 22);
+
+  setStroke(doc, COLORS.line);
+  doc.setLineWidth(1);
+  doc.line(sigLeft, sigLineY, sigLeft + sigColW, sigLineY);
+  doc.line(sigRight, sigLineY, sigRight + sigColW, sigLineY);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  setText(doc, COLORS.muted);
+  doc.text("Signature / printed name", sigLeft, sigLineY + 14);
+  doc.text("MM / DD / YYYY", sigRight, sigLineY + 14);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  setText(doc, COLORS.soft);
+  doc.text("SUPERVISOR", sigLeft, y + 102);
+  setStroke(doc, COLORS.line);
+  doc.line(sigLeft + 78, y + 102, pageWidth - margin - 16, y + 102);
+  setText(doc, COLORS.ink);
+
   // Footer on each page
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i += 1) {
