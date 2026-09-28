@@ -21,6 +21,12 @@ Fill in `.env.local`:
 - `NEXT_PUBLIC_SUPABASE_URL` — from Supabase → Settings → API → Project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — service role key (server only; never commit)
 
+Optional AI:
+
+- `OPENROUTER_API_KEY` — one key for both jobs. **Jev** (`typesafe/jev-1.13`) recommends crew / urgency / jurisdiction. A chat model drafts the staff note from that recommendation and cannot change it.
+
+Without the key, dispatch still runs on Plainsboro map bounds plus local rules.
+
 Use the **same Supabase project** as `street_sync` (same Postgres that backs the FastAPI API).
 
 ```bash

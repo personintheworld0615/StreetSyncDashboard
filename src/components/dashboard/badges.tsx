@@ -31,3 +31,23 @@ function Pill({
 export function StatusBadge({ status }: { status: ReportStatus }) {
   return <Pill className={statusClass[status]}>{statusLabel(status)}</Pill>;
 }
+
+const severityClass = {
+  Low: "bg-[#F3F4F6] text-[#4B5563]",
+  Medium: "bg-[#FFF3E0] text-[#EA580C]",
+  High: "bg-[#FFEBEE] text-[#E53935]",
+} as const;
+
+export function SeverityBadge({
+  label,
+  outOfTown,
+}: {
+  label?: "Low" | "Medium" | "High";
+  outOfTown?: boolean;
+}) {
+  if (outOfTown) {
+    return <Pill className="bg-[#FFEBEE] text-[#E53935]">Out</Pill>;
+  }
+  if (!label) return null;
+  return <Pill className={severityClass[label]}>{label}</Pill>;
+}

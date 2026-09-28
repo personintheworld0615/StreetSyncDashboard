@@ -109,6 +109,51 @@
   background: #eef0f3;
 }
 
+.ss-lockon.leaflet-div-icon {
+  background: transparent;
+  border: none;
+}
+
+.ss-lockon-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 999px;
+  background: #111827;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgb(17 24 39 / 0.28);
+}
+
+.ss-lockon-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 999px;
+  border: 2px solid #111827;
+  animation: ss-lock-pulse 1.7s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.ss-lockon-pulse-delay {
+  animation-delay: 0.45s;
+}
+
+@keyframes ss-lock-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scale(3.8);
+    opacity: 0;
+  }
+}
+
 .ss-panel-enter {
   animation: ss-slide-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }

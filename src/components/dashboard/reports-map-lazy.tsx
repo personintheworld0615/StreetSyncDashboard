@@ -19,6 +19,7 @@ const ReportsMapInner = dynamic(
 type Props = {
   reports: Report[];
   selectedId: number | null;
+  focusSeq: number;
   onSelect: (id: number) => void;
 };
 

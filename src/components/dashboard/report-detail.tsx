@@ -3,16 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { Pencil, Printer, Trash2, X } from "lucide-react";
+import { AiDispatch } from "@/components/dashboard/ai-dispatch";
 import { StatusBadge } from "@/components/dashboard/badges";
 import { categoryIcon, categoryLabel } from "@/lib/categories";
 import { formatAgo, reportTitle, shortLocation } from "@/lib/format";
 import { reportImageCandidates } from "@/lib/report-image";
 import { downloadWorkOrderPdf } from "@/lib/work-order-pdf";
 import { cn } from "@/lib/utils";
+import type { RankItem } from "@/lib/ai/types";
 import type { Report, ReportStatus, ReportUpdate } from "@/lib/types";
 
 type Props = {
   report: Report;
+  queue: Report[];
+  rank?: RankItem;
   updates: ReportUpdate[];
   updatesLoading?: boolean;
   onClose: () => void;
@@ -41,6 +45,8 @@ function statusChipLabel(status: ReportStatus) {
 
 export function ReportDetail({
   report,
+  queue,
+  rank,
   updates,
   updatesLoading,
   onClose,
@@ -194,6 +200,20 @@ export function ReportDetail({
             />
           </div>
         ) : null}
+
+        <AiDispatch
+          report={report}
+          queue={queue}
+          rank={rank}
+          onUseDraft={(text) => {
+            setComment(text);
+            setConfirmPost(false);
+          }}
+          onSuggestStatus={(status) => {
+            setDraftStatus(status);
+            setConfirmPost(false);
+          }}
+        />
 
         <div>
           <p className="mb-2 text-[12px] text-[#757575]">Update</p>

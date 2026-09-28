@@ -3,6 +3,8 @@ import type { Report } from "@/lib/types";
 /** Plainsboro, NJ — default map focus for the ops console. */
 export const MAP_CENTER = { lat: 40.3334, lng: -74.6004 } as const;
 export const MAP_ZOOM = 14 as const;
+/** Street-level lock-on when a report is selected. OSM tiles go to 19. */
+export const MAP_STREET_ZOOM = 19 as const;
 
 export const SYNTHETIC_REPORTS: Report[] = [
   {

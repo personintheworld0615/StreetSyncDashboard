@@ -8,8 +8,8 @@
  * FORM: App scheme, desktop topology. Data: Supabase `reports` via /api routes.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RefreshCw, Search } from "lucide-react";
 import { StatusMetrics } from "@/components/dashboard/status-metrics";
 import { ReportsList } from "@/components/dashboard/reports-list";
 import { ReportsMapLazy } from "@/components/dashboard/reports-map-lazy";
@@ -26,8 +26,10 @@ import {
   fetchReports,
   postReportUpdate,
 } from "@/lib/reports-api";
-import { reportTitle } from "@/lib/format";
+import { formatAgo, reportTitle } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { compareRanked } from "@/lib/ai/rank";
+import type { RankItem, RankResult } from "@/lib/ai/types";
 import type {
   Report,
   ReportStatus,
@@ -47,14 +49,21 @@ export function DashboardApp() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [focusSeq, setFocusSeq] = useState(0);
+  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
+  const hasLoadedRef = useRef(false);
   const [updatesByReport, setUpdatesByReport] = useState<
     Record<number, ReportUpdate[]>
   >({});
   const [updatesLoading, setUpdatesLoading] = useState(false);
+  const [rank, setRank] = useState<RankResult | null>(null);
+  const [ranking, setRanking] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setLoadError(null);
+    if (!hasLoadedRef.current) setLoading(true);
+    else setRefreshing(true);
     try {
       const rows = await fetchReports();
       setReports(rows);
@@ -71,13 +80,55 @@ export function DashboardApp() {
         setLoadError(msg);
       }
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
+      setRefreshing(false);
+      setLastFetchedAt(Date.now());
     }
+  }, []);
+
+  const handleSelect = useCallback((id: number) => {
+    setSelectedId(id);
+    setFocusSeq((n) => n + 1);
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const reportKey = reports
+    .map((r) => `${r.id}:${r.status}`)
+    .join(",");
+
+  useEffect(() => {
+    if (!reports.length) {
+      setRank(null);
+      return;
+    }
+    let cancelled = false;
+    setRanking(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/ai/rank", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reports }),
+        });
+        const body = (await res.json()) as RankResult & { error?: string };
+        if (!res.ok) throw new Error(body.error || "Rank failed");
+        if (!cancelled) setRank(body);
+      } catch {
+        if (!cancelled) setRank(null);
+      } finally {
+        if (!cancelled) setRanking(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Rank when the set of reports changes, not on every field patch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportKey]);
 
   const counts = useMemo(() => countByStatus(reports), [reports]);
 
@@ -85,6 +136,12 @@ export function DashboardApp() {
     () => ["all", ...Array.from(new Set(reports.map((r) => r.category)))],
     [reports]
   );
+
+  const rankById = useMemo(() => {
+    const map: Record<number, RankItem> = {};
+    for (const item of rank?.items ?? []) map[item.id] = item;
+    return map;
+  }, [rank]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -106,9 +163,11 @@ export function DashboardApp() {
         const aResolved = a.status === "Resolved" ? 1 : 0;
         const bResolved = b.status === "Resolved" ? 1 : 0;
         if (aResolved !== bResolved) return aResolved - bResolved;
+        const ranked = compareRanked(rankById[a.id], rankById[b.id]);
+        if (ranked !== 0) return ranked;
         return +new Date(b.time) - +new Date(a.time);
       });
-  }, [reports, statusFilter, category, query]);
+  }, [reports, statusFilter, category, query, rankById]);
 
   const selected = reports.find((r) => r.id === selectedId) ?? null;
   const selectedUpdates =
@@ -293,6 +352,8 @@ export function DashboardApp() {
             <p className="mt-1 text-[12px] text-[#757575]">
               Municipal ops · Plainsboro, NJ
               {usingDemo && " · demo data"}
+              {lastFetchedAt &&
+                ` · updated ${formatAgo(new Date(lastFetchedAt).toISOString())}`}
             </p>
           </div>
 
@@ -315,6 +376,29 @@ export function DashboardApp() {
               className="h-10 w-full rounded-full bg-[#EEF0F3] pr-4 pl-9 text-sm text-[#111827] outline-none placeholder:text-[#9CA3AF]"
             />
           </label>
+
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading || refreshing}
+            aria-busy={refreshing}
+            aria-label="Refresh reports"
+            title="Refresh reports"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-[#111827] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-[#1f2937] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111827] focus-visible:ring-offset-2 disabled:opacity-60"
+          >
+            <RefreshCw
+              className={cn("size-3.5", refreshing && "animate-spin")}
+              aria-hidden
+            />
+            Refresh
+          </button>
+          <span className="sr-only" aria-live="polite">
+            {refreshing
+              ? "Refreshing reports"
+              : lastFetchedAt
+                ? `Reports updated ${formatAgo(new Date(lastFetchedAt).toISOString())}`
+                : ""}
+          </span>
         </div>
 
         {(loadError || usingDemo) && (
@@ -342,9 +426,25 @@ export function DashboardApp() {
               <h1 className="text-[18px] font-semibold tracking-[-0.3px] text-[#111827]">
                 Reports
               </h1>
-              <p className="text-[12px] text-[#757575]">
-                {loading ? "Loading…" : `${filtered.length} in filter`}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-[12px] text-[#757575]">
+                  {loading
+                    ? "Loading…"
+                    : ranking
+                      ? "Ranking…"
+                      : refreshing
+                        ? "Refreshing…"
+                        : `${filtered.length} in filter`}
+                </p>
+                <button
+                  type="button"
+                  disabled={!rank?.nextId}
+                  onClick={() => rank?.nextId && handleSelect(rank.nextId)}
+                  className="rounded-full bg-[#111827] px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-40"
+                >
+                  Work next
+                </button>
+              </div>
             </div>
             <div
               className="mt-3 flex gap-1 overflow-x-auto"
@@ -379,8 +479,10 @@ export function DashboardApp() {
             ) : (
               <ReportsList
                 reports={filtered}
+                rankById={rankById}
                 selectedId={selectedId}
-                onSelect={setSelectedId}
+                nextId={rank?.nextId ?? null}
+                onSelect={handleSelect}
               />
             )}
           </div>
@@ -388,24 +490,36 @@ export function DashboardApp() {
 
         <section className="relative min-h-0 min-w-0 flex-1">
           <ReportsMapLazy
-            reports={filtered}
+            reports={
+              selected && !filtered.some((r) => r.id === selected.id)
+                ? [selected, ...filtered]
+                : filtered
+            }
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            focusSeq={focusSeq}
+            onSelect={handleSelect}
           />
+          {selected && (
+            <div className="ss-detail-overlay pointer-events-none absolute inset-y-0 right-0 z-[1100] flex max-w-[calc(100%-6.5rem)]">
+              <div className="pointer-events-auto h-full shadow-[-12px_0_32px_rgb(17_24_39_/_0.12)]">
+                <ReportDetail
+                  report={selected}
+                  queue={reports}
+                  rank={rankById[selected.id]}
+                  updates={selectedUpdates}
+                  updatesLoading={updatesLoading}
+                  onClose={() => setSelectedId(null)}
+                  onPostUpdate={(payload) =>
+                    handlePostUpdate(selected.id, payload)
+                  }
+                  onEditUpdate={handleEditUpdate}
+                  onDeleteUpdate={handleDeleteUpdate}
+                  saving={statusSaving}
+                />
+              </div>
+            </div>
+          )}
         </section>
-
-        {selected && (
-          <ReportDetail
-            report={selected}
-            updates={selectedUpdates}
-            updatesLoading={updatesLoading}
-            onClose={() => setSelectedId(null)}
-            onPostUpdate={(payload) => handlePostUpdate(selected.id, payload)}
-            onEditUpdate={handleEditUpdate}
-            onDeleteUpdate={handleDeleteUpdate}
-            saving={statusSaving}
-          />
-        )}
       </main>
     </div>
   );
