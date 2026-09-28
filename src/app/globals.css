@@ -109,9 +109,11 @@
   background: #eef0f3;
 }
 
-.ss-lockon.leaflet-div-icon {
-  background: transparent;
-  border: none;
+.ss-lockon.leaflet-div-icon,
+.ss-lockon-wrapper.leaflet-div-icon,
+.ss-marker-icon-wrapper.leaflet-div-icon {
+  background: transparent !important;
+  border: none !important;
 }
 
 .ss-lockon-dot {
@@ -122,7 +124,7 @@
   height: 16px;
   margin: -8px 0 0 -8px;
   border-radius: 999px;
-  background: #111827;
+  background: var(--marker-color, #111827);
   border: 2px solid #fff;
   box-shadow: 0 2px 8px rgb(17 24 39 / 0.28);
 }
@@ -135,12 +137,29 @@
   height: 16px;
   margin: -8px 0 0 -8px;
   border-radius: 999px;
-  border: 2px solid #111827;
+  border: 2px solid var(--marker-color, #111827);
   animation: ss-lock-pulse 1.7s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
 .ss-lockon-pulse-delay {
   animation-delay: 0.45s;
+}
+
+.ss-lockon-pulse-red {
+  animation: ss-lock-pulse-red 1.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes ss-lock-pulse-red {
+  0% {
+    transform: scale(1);
+    opacity: 0.85;
+    border-color: #ef4444;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+    border-color: #dc2626;
+  }
 }
 
 @keyframes ss-lock-pulse {
@@ -152,6 +171,85 @@
     transform: scale(3.8);
     opacity: 0;
   }
+}
+
+/* Map marker custom styles */
+.ss-marker-container {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ss-marker-dot {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+  transition: transform 0.15s ease-out;
+}
+
+.ss-marker-container:hover .ss-marker-dot {
+  transform: scale(1.25);
+}
+
+.ss-marker-flashing {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background-color: #ef4444;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+  animation: ss-flash-red-anim 0.8s infinite alternate ease-in-out;
+}
+
+.ss-marker-flashing-ring {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  border: 2px solid #ef4444;
+  animation: ss-flash-red-ring-anim 1.3s infinite ease-out;
+}
+
+@keyframes ss-flash-red-anim {
+  0% {
+    background-color: #f87171;
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.4);
+    transform: scale(0.9);
+  }
+  100% {
+    background-color: #dc2626;
+    box-shadow: 0 0 14px rgba(220, 38, 38, 0.95);
+    transform: scale(1.22);
+  }
+}
+
+@keyframes ss-flash-red-ring-anim {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+.ss-marker-greyed {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background-color: #9ca3af;
+  border: 2px solid #e5e7eb;
+  opacity: 0.55;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 .ss-panel-enter {

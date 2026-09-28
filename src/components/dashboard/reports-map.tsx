@@ -5,7 +5,6 @@ import {
   MapContainer,
   TileLayer,
   useMap,
-  CircleMarker,
   Marker,
   Polygon,
 } from "react-leaflet";
@@ -23,17 +22,134 @@ type Props = {
 };
 
 const statusColor: Record<ReportStatus, string> = {
-  Open: "#4B5563",
+  Open: "#2563EB",
   "In Progress": "#EA580C",
   Resolved: "#0F766E",
 };
 
-const lockOnIcon = L.divIcon({
-  className: "ss-lockon",
-  html: '<span class="ss-lockon-pulse"></span><span class="ss-lockon-pulse ss-lockon-pulse-delay"></span><span class="ss-lockon-dot"></span>',
-  iconSize: [56, 56],
-  iconAnchor: [28, 28],
-});
+function isPointInPolygon(
+  lat: number,
+  lng: number,
+  polygon: [number, number][]
+): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0],
+      yi = polygon[i][1];
+    const xj = polygon[j][0],
+      yj = polygon[j][1];
+    const intersect =
+      yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+export function isReportInJurisdiction(report: Report): boolean {
+  if (
+    !Number.isFinite(report.latitude) ||
+    !Number.isFinite(report.longitude) ||
+    (report.latitude === 0 && report.longitude === 0)
+  ) {
+    return false;
+  }
+  return isPointInPolygon(
+    report.latitude,
+    report.longitude,
+    PLAINSBORO_BOUNDARY
+  );
+}
+
+function createReportIcon(report: Report, isSelected: boolean): L.DivIcon {
+  const inJurisdiction = isReportInJurisdiction(report);
+  const isResolved = report.status === "Resolved";
+
+  let mainColor = statusColor[report.status];
+  let isFlashing = false;
+  let isGreyedOut = false;
+
+  if (!inJurisdiction) {
+    if (isResolved) {
+      isGreyedOut = true;
+      mainColor = "#9CA3AF";
+    } else {
+      isFlashing = true;
+      mainColor = "#EF4444";
+    }
+  }
+
+  if (isSelected) {
+    let extraPulseClass = "";
+    if (isFlashing) {
+      extraPulseClass = " ss-lockon-pulse-red";
+    }
+
+    const html = `
+      <div class="ss-lockon" style="--marker-color: ${mainColor};${isGreyedOut ? " opacity: 0.65;" : ""}">
+        <span class="ss-lockon-pulse${extraPulseClass}"></span>
+        <span class="ss-lockon-pulse ss-lockon-pulse-delay${extraPulseClass}"></span>
+        <span class="ss-lockon-dot"></span>
+      </div>
+    `;
+
+    return L.divIcon({
+      className: "ss-lockon-wrapper",
+      html,
+      iconSize: [56, 56],
+      iconAnchor: [28, 28],
+    });
+  }
+
+  if (isFlashing) {
+    const html = `
+      <div class="ss-marker-container">
+        <span class="ss-marker-flashing-ring"></span>
+        <span class="ss-marker-flashing"></span>
+      </div>
+    `;
+    return L.divIcon({
+      className: "ss-marker-icon-wrapper",
+      html,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+  }
+
+  if (isGreyedOut) {
+    const html = `
+      <div class="ss-marker-container">
+        <span class="ss-marker-greyed"></span>
+      </div>
+    `;
+    return L.divIcon({
+      className: "ss-marker-icon-wrapper",
+      html,
+      iconSize: [32, 32],
+      iconAnchor: [16, 16],
+    });
+  }
+
+  const html = `
+    <div class="ss-marker-container">
+      <span class="ss-marker-dot" style="background-color: ${mainColor};"></span>
+    </div>
+  `;
+  return L.divIcon({
+    className: "ss-marker-icon-wrapper",
+    html,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+}
+
+function getZIndex(report: Report, isSelected: boolean): number {
+  if (isSelected) return 1000;
+  const inJurisdiction = isReportInJurisdiction(report);
+  if (!inJurisdiction) {
+    return report.status === "Resolved" ? 50 : 500;
+  }
+  return 200;
+}
 
 function hasValidCoords(report: Report) {
   return (
@@ -175,34 +291,20 @@ export function ReportsMap({
             opacity: 0.95,
           }}
         />
-        {mappable.map((report) =>
-          report.id === selectedId ? (
+        {mappable.map((report) => {
+          const isSelected = report.id === selectedId;
+          return (
             <Marker
               key={report.id}
               position={[report.latitude, report.longitude]}
-              icon={lockOnIcon}
-              zIndexOffset={1000}
+              icon={createReportIcon(report, isSelected)}
+              zIndexOffset={getZIndex(report, isSelected)}
               eventHandlers={{
                 click: () => onSelect(report.id),
               }}
             />
-          ) : (
-            <CircleMarker
-              key={report.id}
-              center={[report.latitude, report.longitude]}
-              radius={8}
-              pathOptions={{
-                color: "#fff",
-                weight: 2,
-                fillColor: statusColor[report.status],
-                fillOpacity: 0.85,
-              }}
-              eventHandlers={{
-                click: () => onSelect(report.id),
-              }}
-            />
-          )
-        )}
+          );
+        })}
       </MapContainer>
 
       <div className="pointer-events-none absolute top-3 right-3 z-[1000]">
@@ -213,6 +315,37 @@ export function ReportsMap({
         >
           Township
         </button>
+      </div>
+
+      <div className="pointer-events-none absolute bottom-4 left-4 z-[1000] hidden sm:block">
+        <div className="pointer-events-auto rounded-xl bg-white/95 p-2.5 shadow-md ring-1 ring-black/5 backdrop-blur-xs text-[11px] font-medium text-[#374151] space-y-1.5">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-1">
+            Map Legend
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="size-2.5 rounded-full bg-[#2563EB] ring-1 ring-white" />
+            <span>Open</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="size-2.5 rounded-full bg-[#EA580C] ring-1 ring-white" />
+            <span>Active (In Progress)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="size-2.5 rounded-full bg-[#0F766E] ring-1 ring-white" />
+            <span>Resolved</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="relative flex size-2.5 items-center justify-center">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#EF4444] opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-[#EF4444]" />
+            </span>
+            <span>Out of Jurisdiction (Active)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="size-2.5 rounded-full bg-[#9CA3AF] opacity-60" />
+            <span>Out of Jurisdiction (Resolved)</span>
+          </div>
+        </div>
       </div>
     </div>
   );
