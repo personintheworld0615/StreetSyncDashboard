@@ -28,6 +28,14 @@ const COLORS = {
   resolvedFg: [15, 118, 110] as const,
 };
 
+function pdfSafe(text: string) {
+  return text
+    .replace(/[→➜➔⟶]/g, " to ")
+    .replace(/[—–]/g, "-")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'");
+}
+
 function statusChip(status: string) {
   if (status === "In Progress") return "Active";
   return status;
@@ -393,13 +401,15 @@ export async function downloadWorkOrderPdf(
     const chronological = [...updates].reverse();
     for (const update of chronological) {
       const statusChanged = update.old_status !== update.new_status;
-      const headline = statusChanged
-        ? `${statusChip(update.old_status)} → ${statusChip(update.new_status)}`
-        : "Staff comment";
+      const headline = pdfSafe(
+        statusChanged
+          ? `${statusChip(update.old_status)} to ${statusChip(update.new_status)}`
+          : "Staff comment"
+      );
       const when = Number.isNaN(+new Date(update.created_at))
         ? update.created_at
         : format(new Date(update.created_at), "MMM d, yyyy · h:mm a");
-      const comment = update.comment?.trim() || "";
+      const comment = pdfSafe(update.comment?.trim() || "");
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       const commentLines = comment
