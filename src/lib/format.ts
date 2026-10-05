@@ -23,6 +23,7 @@ export function shortLocation(location: string) {
 export function statusLabel(status: ReportStatus) {
   if (status === "Resolved") return "Resolved";
   if (status === "In Progress") return "In progress";
+  if (status === "Pending") return "Pending";
   return "Open";
 }
 
@@ -30,4 +31,28 @@ export function reportTitle(report: Report) {
   if (report.title?.trim()) return report.title.trim();
   const first = report.description.split(/[.!?]/)[0]?.trim();
   return first || report.category;
+}
+
+export function formatFollowUp(iso: string): { label: string; isDue: boolean } {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return { label: "Scheduled", isDue: false };
+    const now = new Date();
+    const isDue = d.getTime() <= now.getTime();
+
+    const month = d.toLocaleDateString("en-US", { month: "short" });
+    const day = d.getDate();
+    const hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const h12 = hours % 12 || 12;
+    const dateStr = `${month} ${day}, ${h12}:${minutes} ${ampm}`;
+
+    if (isDue) {
+      return { label: `Due now (${dateStr})`, isDue: true };
+    }
+    return { label: dateStr, isDue: false };
+  } catch {
+    return { label: "Scheduled", isDue: false };
+  }
 }

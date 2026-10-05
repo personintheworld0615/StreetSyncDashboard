@@ -1,10 +1,10 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Clock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SeverityBadge, StatusBadge } from "@/components/dashboard/badges";
 import { categoryIcon } from "@/lib/categories";
-import { formatAgo, reportTitle, shortLocation } from "@/lib/format";
+import { formatAgo, formatFollowUp, reportTitle, shortLocation } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RankItem } from "@/lib/ai/types";
 import type { Report } from "@/lib/types";
@@ -32,6 +32,8 @@ export function ReportsList({
             const selected = report.id === selectedId;
             const Icon = categoryIcon(report.category);
             const rank = rankById[report.id];
+            const followUpInfo = report.followUpAt ? formatFollowUp(report.followUpAt) : null;
+
             return (
               <li key={report.id}>
                 <button
@@ -74,6 +76,15 @@ export function ReportsList({
                       <span aria-hidden>·</span>
                       <span className="shrink-0">{formatAgo(report.time)}</span>
                     </span>
+                    {followUpInfo && report.status === "Pending" && (
+                      <span className={cn(
+                        "mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                        followUpInfo.isDue ? "bg-[#FEE2E2] text-[#DC2626]" : "bg-[#FEF3C7] text-[#D97706]"
+                      )}>
+                        <Clock className="size-3" />
+                        <span>{followUpInfo.label}</span>
+                      </span>
+                    )}
                   </span>
                   <ChevronRight
                     className="size-5 shrink-0 text-neutral-400"

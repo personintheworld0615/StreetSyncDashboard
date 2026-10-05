@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, Clock, RefreshCw, Search } from "lucide-react";
 import { StatusMetrics } from "@/components/dashboard/status-metrics";
 import { ReportsList } from "@/components/dashboard/reports-list";
 import { ReportsMapLazy } from "@/components/dashboard/reports-map-lazy";
@@ -19,7 +19,9 @@ import {
   countByStatus,
 } from "@/lib/data/reports";
 import { categoryLabel } from "@/lib/categories";
+import { isReportInJurisdiction } from "@/lib/plainsboro";
 import {
+  deleteReport,
   deleteReportUpdate,
   editReportUpdate,
   fetchReportUpdates,
@@ -143,6 +145,21 @@ export function DashboardApp() {
     return map;
   }, [rank]);
 
+  const outOfTownReports = useMemo(() => {
+    return reports.filter(
+      (r) => !r.isDraft && !isReportInJurisdiction(r) && r.status !== "Resolved"
+    );
+  }, [reports]);
+
+  const duePendingReports = useMemo(() => {
+    const now = Date.now();
+    return reports.filter((r) => {
+      if (r.status !== "Pending" || !r.followUpAt) return false;
+      const dueTime = new Date(r.followUpAt).getTime();
+      return !isNaN(dueTime) && dueTime <= now;
+    });
+  }, [reports]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return reports
@@ -215,13 +232,21 @@ export function DashboardApp() {
 
   async function handlePostUpdate(
     id: number,
-    payload: { status?: ReportStatus; comment?: string | null }
+    payload: {
+      status?: ReportStatus;
+      comment?: string | null;
+      follow_up_at?: string | null;
+    }
   ) {
     const current = reports.find((r) => r.id === id);
     if (!current) return;
 
     const nextStatus = payload.status ?? current.status;
     const comment = payload.comment?.trim() || null;
+    const followUpAt =
+      payload.follow_up_at !== undefined
+        ? payload.follow_up_at
+        : current.followUpAt;
 
     if (usingDemo) {
       const update: ReportUpdate = {
@@ -235,7 +260,7 @@ export function DashboardApp() {
         is_read: false,
         created_at: new Date().toISOString(),
       };
-      applyReport({ ...current, status: nextStatus });
+      applyReport({ ...current, status: nextStatus, followUpAt });
       prependUpdate(id, update);
       return;
     }
@@ -243,11 +268,79 @@ export function DashboardApp() {
     setStatusSaving(true);
     try {
       const result = await postReportUpdate(id, payload);
-      applyReport(result.report);
+      applyReport({ ...result.report, followUpAt });
       if (result.update) prependUpdate(id, result.update);
       else await loadUpdates(id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not post update";
+      setLoadError(msg);
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function handleDeleteReport(id: number) {
+    if (usingDemo) {
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      if (selectedId === id) setSelectedId(null);
+      return;
+    }
+
+    setStatusSaving(true);
+    try {
+      await deleteReport(id);
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      if (selectedId === id) setSelectedId(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not delete report";
+      setLoadError(msg);
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function handleCancelAllOutOfJurisdiction() {
+    if (!outOfTownReports.length) return;
+    const count = outOfTownReports.length;
+    const confirmMsg = `Cancel, send notifications, and remove ${count} out-of-jurisdiction report${count > 1 ? "s" : ""} from the system?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setStatusSaving(true);
+    try {
+      for (const r of outOfTownReports) {
+        const comment = `Notice: This report is located outside Plainsboro Township municipal boundaries (${r.location}). The ticket has been cancelled in Plainsboro Township and forwarded to the appropriate neighboring jurisdiction.`;
+
+        if (usingDemo) {
+          const update: ReportUpdate = {
+            id: ++demoUpdateSeq,
+            report_id: r.id,
+            user_id: r.user_id,
+            report_title: reportTitle(r),
+            old_status: r.status,
+            new_status: "Resolved",
+            comment,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          };
+          prependUpdate(r.id, update);
+          setReports((prev) => prev.filter((item) => item.id !== r.id));
+        } else {
+          await postReportUpdate(r.id, {
+            status: "Resolved",
+            comment,
+          });
+          await deleteReport(r.id);
+          setReports((prev) => prev.filter((item) => item.id !== r.id));
+        }
+      }
+      if (selectedId && outOfTownReports.some((r) => r.id === selectedId)) {
+        setSelectedId(null);
+      }
+    } catch (e) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "Could not cancel out-of-jurisdiction reports";
       setLoadError(msg);
     } finally {
       setStatusSaving(false);
@@ -473,6 +566,44 @@ export function DashboardApp() {
               })}
             </div>
           </div>
+
+          {outOfTownReports.length > 0 && (
+            <div className="mx-4 mb-2 flex flex-col gap-2 rounded-2xl border border-[#FCA5A5] bg-[#FEF2F2] p-2.5 text-[12px] text-[#991B1B]">
+              <div className="flex items-center gap-1.5 font-medium">
+                <AlertTriangle className="size-4 shrink-0 text-[#DC2626]" />
+                <span>
+                  <strong>{outOfTownReports.length}</strong> out-of-jurisdiction report{outOfTownReports.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={statusSaving}
+                onClick={() => void handleCancelAllOutOfJurisdiction()}
+                className="w-full rounded-full bg-[#DC2626] px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#B91C1C] disabled:opacity-50"
+              >
+                Cancel & Notify All ({outOfTownReports.length})
+              </button>
+            </div>
+          )}
+
+          {duePendingReports.length > 0 && (
+            <div className="mx-4 mb-2 flex flex-col gap-1.5 rounded-2xl border border-[#FCD34D] bg-[#FEF3C7] p-2.5 text-[12px] text-[#92400E]">
+              <div className="flex items-center gap-1.5 font-semibold text-[#D97706]">
+                <Clock className="size-4 shrink-0 text-[#D97706]" />
+                <span>
+                  <strong>{duePendingReports.length}</strong> Pending Follow-Up{duePendingReports.length > 1 ? "s" : ""} Due Now
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSelect(duePendingReports[0].id)}
+                className="w-full rounded-full bg-[#D97706] px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-[#B45309]"
+              >
+                Review Follow-Up #{duePendingReports[0].id}
+              </button>
+            </div>
+          )}
+
           <div className="min-h-0 flex-1 px-2">
             {loading ? (
               <p className="px-2 py-8 text-sm text-[#757575]">Loading reports…</p>
@@ -514,6 +645,7 @@ export function DashboardApp() {
                   }
                   onEditUpdate={handleEditUpdate}
                   onDeleteUpdate={handleDeleteUpdate}
+                  onDeleteReport={handleDeleteReport}
                   saving={statusSaving}
                 />
               </div>

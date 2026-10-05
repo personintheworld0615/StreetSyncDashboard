@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import type { StatusFilter } from "@/lib/types";
 
 type Props = {
-  counts: { Open: number; "In Progress": number; Resolved: number };
+  counts: { Open: number; "In Progress": number; Pending?: number; Resolved: number };
   active: StatusFilter;
   onSelect: (v: StatusFilter) => void;
 };
@@ -12,6 +12,7 @@ type Props = {
 const cells = [
   { key: "Open" as const, label: "open" },
   { key: "In Progress" as const, label: "active" },
+  { key: "Pending" as const, label: "pending" },
   { key: "Resolved" as const, label: "resolved" },
 ];
 

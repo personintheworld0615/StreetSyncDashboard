@@ -8,6 +8,21 @@ export const MAP_STREET_ZOOM = 19 as const;
 
 export const SYNTHETIC_REPORTS: Report[] = [
   {
+    id: 1045,
+    description:
+      "Damaged guardrail on US-1 corridor outside Plainsboro municipal boundary.",
+    category: "Road Damage",
+    latitude: 40.3521,
+    longitude: -74.6512,
+    location: "US-1 North, West Windsor, NJ",
+    image: null,
+    time: "2026-07-25T15:10:00Z",
+    status: "Open",
+    user_id: 19,
+    isDraft: false,
+    synthetic: true,
+  },
+  {
     id: 1042,
     description:
       "Large pothole spanning the right lane near the shopping center entrance.",
@@ -74,7 +89,7 @@ export const SYNTHETIC_REPORTS: Report[] = [
     location: "Wyndhurst Dr, Plainsboro, NJ",
     image: null,
     time: "2026-07-23T16:00:00Z",
-    status: "Open",
+    status: "Pending",
     user_id: 15,
     isDraft: false,
     synthetic: true,
@@ -99,6 +114,7 @@ export function countByStatus(reports: Report[]) {
   return {
     Open: reports.filter((r) => r.status === "Open").length,
     "In Progress": reports.filter((r) => r.status === "In Progress").length,
+    Pending: reports.filter((r) => r.status === "Pending").length,
     Resolved: reports.filter((r) => r.status === "Resolved").length,
   };
 }

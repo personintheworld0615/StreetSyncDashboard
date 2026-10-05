@@ -29,7 +29,7 @@ export type DbUpdate = {
   created_at: string;
 };
 
-const VALID_STATUS: ReportStatus[] = ["Open", "In Progress", "Resolved"];
+const VALID_STATUS: ReportStatus[] = ["Open", "In Progress", "Pending", "Resolved"];
 
 export const UPDATE_SELECT =
   "id, report_id, user_id, report_title, old_status, new_status, comment, is_read, created_at";
@@ -40,6 +40,7 @@ export const REPORT_SELECT =
 export function normalizeStatus(raw: string): ReportStatus {
   const s = raw.trim();
   if (s === "In Progress") return "In Progress";
+  if (s === "Pending") return "Pending";
   if (s === "Resolved" || s === "Closed") return "Resolved";
   return "Open";
 }

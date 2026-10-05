@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: Params) {
   const statusRaw = body.status?.trim();
   if (statusRaw && !isAllowedStatus(statusRaw)) {
     return NextResponse.json(
-      { error: "status must be Open, In Progress, or Resolved" },
+      { error: "status must be Open, In Progress, Pending, or Resolved" },
       { status: 422 }
     );
   }

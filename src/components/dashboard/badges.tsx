@@ -4,8 +4,9 @@ import { statusLabel } from "@/lib/format";
 import type { ReportStatus } from "@/lib/types";
 
 const statusClass: Record<ReportStatus, string> = {
-  Open: "bg-[#F3F4F6] text-[#4B5563]",
+  Open: "bg-[#EFF6FF] text-[#2563EB]",
   "In Progress": "bg-[#FFF1E8] text-[#EA580C]",
+  Pending: "bg-[#FEF3C7] text-[#D97706]",
   Resolved: "bg-[#E6F4F1] text-[#0F766E]",
 };
 

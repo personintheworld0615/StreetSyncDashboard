@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
-import { Pencil, Printer, Trash2, X } from "lucide-react";
+import { AlertTriangle, Clock, Pencil, Printer, Trash2, X } from "lucide-react";
 import { AiDispatch } from "@/components/dashboard/ai-dispatch";
 import { StatusBadge } from "@/components/dashboard/badges";
 import { categoryIcon, categoryLabel } from "@/lib/categories";
-import { formatAgo, reportTitle, shortLocation } from "@/lib/format";
+import { formatAgo, formatFollowUp, reportTitle, shortLocation } from "@/lib/format";
+import { isReportInJurisdiction } from "@/lib/plainsboro";
 import { reportImageCandidates } from "@/lib/report-image";
 import { downloadWorkOrderPdf } from "@/lib/work-order-pdf";
 import { cn } from "@/lib/utils";
@@ -23,24 +24,46 @@ type Props = {
   onPostUpdate: (payload: {
     status?: ReportStatus;
     comment?: string | null;
+    follow_up_at?: string | null;
   }) => Promise<void>;
   onEditUpdate: (
     updateId: number,
     payload: { comment?: string | null; new_status?: ReportStatus }
   ) => Promise<void>;
   onDeleteUpdate: (updateId: number) => Promise<void>;
+  onDeleteReport?: (id: number) => Promise<void>;
   saving?: boolean;
 };
 
 const statusActions: { value: ReportStatus; label: string }[] = [
   { value: "Open", label: "Open" },
   { value: "In Progress", label: "Active" },
+  { value: "Pending", label: "Pending" },
   { value: "Resolved", label: "Resolved" },
 ];
 
 function statusChipLabel(status: ReportStatus) {
   if (status === "In Progress") return "Active";
   return status;
+}
+
+function toDatetimeLocal(isoOrDate?: string | null) {
+  if (!isoOrDate) return "";
+  try {
+    const d = new Date(isoOrDate);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return "";
+  }
+}
+
+function getPresetDate(daysFromNow: number, hour = 9) {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  d.setHours(hour, 0, 0, 0);
+  return toDatetimeLocal(d.toISOString());
 }
 
 export function ReportDetail({
@@ -53,16 +76,22 @@ export function ReportDetail({
   onPostUpdate,
   onEditUpdate,
   onDeleteUpdate,
+  onDeleteReport,
   saving,
 }: Props) {
   const Icon = categoryIcon(report.category);
+  const inJurisdiction = isReportInJurisdiction(report);
   const [draftStatus, setDraftStatus] = useState<ReportStatus>(report.status);
   const [comment, setComment] = useState("");
+  const [followUpDate, setFollowUpDate] = useState<string>(
+    toDatetimeLocal(report.followUpAt)
+  );
   const [confirmPost, setConfirmPost] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editComment, setEditComment] = useState("");
   const [editStatus, setEditStatus] = useState<ReportStatus>("Open");
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmDeleteReport, setConfirmDeleteReport] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [imageCandidateIndex, setImageCandidateIndex] = useState(0);
   const photoRef = useRef<HTMLImageElement>(null);
@@ -72,21 +101,27 @@ export function ReportDetail({
   useEffect(() => {
     setDraftStatus(report.status);
     setComment("");
+    setFollowUpDate(toDatetimeLocal(report.followUpAt));
     setConfirmPost(false);
     setEditingId(null);
     setConfirmDeleteId(null);
+    setConfirmDeleteReport(false);
     setImageCandidateIndex(0);
-  }, [report.id, report.status]);
+  }, [report.id, report.status, report.followUpAt]);
 
   const latest = updates[0] ?? null;
   const trimmedComment = comment.trim();
   const statusChanging = draftStatus !== report.status;
-  const canPost = statusChanging || Boolean(trimmedComment);
+  const canPost = statusChanging || Boolean(trimmedComment) || (draftStatus === "Pending" && Boolean(followUpDate));
 
   async function submitUpdate() {
     await onPostUpdate({
       ...(statusChanging ? { status: draftStatus } : {}),
       comment: trimmedComment || null,
+      follow_up_at:
+        draftStatus === "Pending" && followUpDate
+          ? new Date(followUpDate).toISOString()
+          : null,
     });
     setComment("");
     setConfirmPost(false);
@@ -102,6 +137,22 @@ export function ReportDetail({
       return;
     }
     void submitUpdate();
+  }
+
+  async function handleCancelOutOfJurisdiction() {
+    const cancelComment = `Notice: This report is located outside Plainsboro Township municipal boundaries (${shortLocation(report.location)}). The ticket has been cancelled in Plainsboro Township and forwarded to the appropriate neighboring jurisdiction.`;
+    await onPostUpdate({
+      status: "Resolved",
+      comment: cancelComment,
+    });
+    if (onDeleteReport) {
+      await onDeleteReport(report.id);
+    }
+  }
+
+  async function handleDeleteReport() {
+    if (!onDeleteReport) return;
+    await onDeleteReport(report.id);
   }
 
   async function saveEdit() {
@@ -132,6 +183,8 @@ export function ReportDetail({
     }
   }
 
+  const followUpInfo = report.followUpAt ? formatFollowUp(report.followUpAt) : null;
+
   return (
     <aside className="ss-panel-enter flex h-full w-[340px] shrink-0 flex-col border-l border-[#E5E7EB] bg-white">
       <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-3">
@@ -159,6 +212,53 @@ export function ReportDetail({
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
+        {!inJurisdiction && (
+          <div className="rounded-2xl border border-[#FCA5A5] bg-[#FEF2F2] p-3 text-[12px] text-[#991B1B]">
+            <div className="flex items-center gap-2 font-semibold text-[#DC2626]">
+              <AlertTriangle className="size-4 shrink-0" />
+              <span>Outside Municipal Jurisdiction</span>
+            </div>
+            <p className="mt-1 leading-snug text-[#7F1D1D]">
+              This location lies outside Plainsboro Township boundaries.
+            </p>
+            {report.status !== "Resolved" && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void handleCancelOutOfJurisdiction()}
+                className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-full bg-[#DC2626] px-3 py-1.5 font-semibold text-white hover:bg-[#B91C1C] disabled:opacity-50"
+              >
+                <AlertTriangle className="size-3.5" aria-hidden />
+                Cancel Report & Notify User
+              </button>
+            )}
+          </div>
+        )}
+
+        {followUpInfo && report.status === "Pending" && (
+          <div
+            className={cn(
+              "rounded-2xl p-3 text-[12px]",
+              followUpInfo.isDue
+                ? "border border-[#FCA5A5] bg-[#FEF2F2] text-[#991B1B]"
+                : "border border-[#FDE68A] bg-[#FEF3C7] text-[#92400E]"
+            )}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Clock className="size-4 shrink-0" />
+                <span>Scheduled Follow-Up</span>
+              </div>
+              {followUpInfo.isDue && (
+                <span className="rounded-full bg-[#DC2626] px-2 py-0.5 text-[10px] font-bold text-white">
+                  DUE NOW
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[13px] font-medium">{followUpInfo.label}</p>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-1.5">
           <StatusBadge status={report.status} />
           {report.synthetic && (
@@ -218,7 +318,7 @@ export function ReportDetail({
         <div>
           <p className="mb-2 text-[12px] text-[#757575]">Update</p>
           <p className="mb-1.5 text-[11px] text-[#9CA3AF]">
-            Change status, leave a comment, or both
+            Change status, leave a comment, or set a follow-up date
           </p>
           <div className="flex rounded-full bg-[#EEF0F3] p-1">
             {statusActions.map((s) => {
@@ -246,6 +346,47 @@ export function ReportDetail({
               );
             })}
           </div>
+
+          {draftStatus === "Pending" && (
+            <div className="mt-2.5 rounded-2xl border border-[#FDE68A] bg-[#FEF3C7]/60 p-3 text-[12px] text-[#92400E]">
+              <div className="flex items-center gap-1.5 font-semibold text-[#D97706]">
+                <Clock className="size-4 shrink-0" />
+                <span>Follow-Up Reminder Estimate</span>
+              </div>
+              <p className="mt-1 text-[11px] text-[#B45309]">
+                Set a specific date & time to follow back on this report.
+              </p>
+              <input
+                type="datetime-local"
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+                className="mt-2 w-full rounded-xl border border-[#FCD34D] bg-white px-2.5 py-1.5 text-[12px] text-[#111827] outline-none focus:border-[#D97706]"
+              />
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setFollowUpDate(getPresetDate(1, 9))}
+                  className="rounded-full bg-white px-2.5 py-1 font-medium text-[#B45309] shadow-xs hover:bg-[#FEF3C7]"
+                >
+                  Tomorrow 9 AM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFollowUpDate(getPresetDate(3, 9))}
+                  className="rounded-full bg-white px-2.5 py-1 font-medium text-[#B45309] shadow-xs hover:bg-[#FEF3C7]"
+                >
+                  In 3 Days
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFollowUpDate(getPresetDate(7, 9))}
+                  className="rounded-full bg-white px-2.5 py-1 font-medium text-[#B45309] shadow-xs hover:bg-[#FEF3C7]"
+                >
+                  Next Week
+                </button>
+              </div>
+            </div>
+          )}
 
           <textarea
             value={comment}
@@ -319,6 +460,48 @@ export function ReportDetail({
           <p className="mt-1.5 text-[11px] text-[#9CA3AF]">
             PDF with details, photo, and update history
           </p>
+        </div>
+
+        <div>
+          <p className="mb-2 text-[12px] text-[#757575]">Municipal Management</p>
+          {confirmDeleteReport ? (
+            <div className="rounded-2xl border border-[#FCA5A5] bg-[#FEF2F2] p-3">
+              <p className="text-[12px] font-semibold text-[#991B1B]">
+                Permanently delete Report #{report.id}?
+              </p>
+              <p className="mt-1 text-[11px] text-[#7F1D1D]">
+                This will remove the report and all its updates from the system permanently.
+              </p>
+              <div className="mt-2.5 flex gap-2">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void handleDeleteReport()}
+                  className="rounded-full bg-[#DC2626] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#B91C1C] disabled:opacity-50"
+                >
+                  Yes, Delete Report
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setConfirmDeleteReport(false)}
+                  className="rounded-full px-3 py-1.5 text-[12px] font-medium text-[#757575] hover:bg-[#E8EAED]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => setConfirmDeleteReport(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-semibold text-[#DC2626] hover:border-[#FCA5A5] hover:bg-[#FEF2F2]"
+            >
+              <Trash2 className="size-3.5" aria-hidden />
+              Cancel & Delete Report
+            </button>
+          )}
         </div>
 
         <div>

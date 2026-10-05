@@ -74,3 +74,16 @@ export async function deleteReportUpdate(
 
   return res.json() as Promise<{ ok: true; report: Report | null }>;
 }
+
+export async function deleteReport(
+  id: number
+): Promise<{ ok: true; id: number }> {
+  const res = await fetch(`/api/reports/${id}`, { method: "DELETE" });
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `Failed to delete report (${res.status})`);
+  }
+
+  return res.json() as Promise<{ ok: true; id: number }>;
+}

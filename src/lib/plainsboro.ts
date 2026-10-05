@@ -1,21 +1,29 @@
+import { PLAINSBORO_BOUNDARY } from "@/lib/plainsboro-boundary";
 import type { Report } from "@/lib/types";
 
-/** Approximate Plainsboro Township, NJ bounds. */
-const BOUNDS = {
-  minLat: 40.31,
-  maxLat: 40.36,
-  minLng: -74.64,
-  maxLng: -74.54,
-} as const;
+function isPointInPolygon(
+  lat: number,
+  lng: number,
+  polygon: [number, number][]
+): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0],
+      yi = polygon[i][1];
+    const xj = polygon[j][0],
+      yj = polygon[j][1];
+    const intersect =
+      yi > lng !== yj > lng && lat < ((xj - xi) * (lng - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
 
-export function isPlainsboroReport(report: {
+export function isReportInJurisdiction(report: {
   location?: string | null;
   latitude?: number;
   longitude?: number;
 }): boolean {
-  const location = (report.location ?? "").toLowerCase();
-  if (location.includes("plainsboro")) return true;
-
   const lat = report.latitude;
   const lng = report.longitude;
   if (
@@ -23,19 +31,22 @@ export function isPlainsboroReport(report: {
     typeof lng === "number" &&
     Number.isFinite(lat) &&
     Number.isFinite(lng) &&
-    lat !== 0 &&
-    lng !== 0 &&
-    lat >= BOUNDS.minLat &&
-    lat <= BOUNDS.maxLat &&
-    lng >= BOUNDS.minLng &&
-    lng <= BOUNDS.maxLng
+    !(lat === 0 && lng === 0)
   ) {
-    return true;
+    return isPointInPolygon(lat, lng, PLAINSBORO_BOUNDARY);
   }
+  const location = (report.location ?? "").toLowerCase();
+  return location.includes("plainsboro");
+}
 
-  return false;
+export function isPlainsboroReport(report: {
+  location?: string | null;
+  latitude?: number;
+  longitude?: number;
+}): boolean {
+  return isReportInJurisdiction(report);
 }
 
 export function filterPlainsboroReports<T extends Report>(reports: T[]): T[] {
-  return reports.filter(isPlainsboroReport);
+  return reports.filter(isReportInJurisdiction);
 }

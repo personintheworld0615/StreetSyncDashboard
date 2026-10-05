@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { recommendedStatus } from "@/lib/ai/policy";
 import type { RankItem, TriageResult } from "@/lib/ai/types";
 import type { Report, ReportStatus } from "@/lib/types";
@@ -43,6 +44,7 @@ export function AiDispatch({
   const [drafting, setDrafting] = useState(false);
 
   useEffect(() => {
+    if (report.status === "Resolved") return;
     if (rank) {
       setLoading(false);
       return;
@@ -73,6 +75,20 @@ export function AiDispatch({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.id, report.status, rank?.id, rank?.action]);
+
+  if (report.status === "Resolved") {
+    return (
+      <section className="rounded-2xl border border-[#E6F4F1] bg-[#F4FAF8] px-3.5 py-3">
+        <div className="flex items-center gap-2 text-[13px] font-semibold text-[#0F766E]">
+          <CheckCircle2 className="size-4 shrink-0 text-[#0F766E]" />
+          <span>Report Resolved & Closed</span>
+        </div>
+        <p className="mt-1 text-[12px] leading-snug text-[#757575]">
+          This ticket is completed. Jev AI recommendations and next steps are disabled for resolved reports.
+        </p>
+      </section>
+    );
+  }
 
   const action = rank?.action ?? triage?.action.value ?? "hold";
   const why =

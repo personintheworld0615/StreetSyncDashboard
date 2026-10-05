@@ -1,4 +1,4 @@
-export type ReportStatus = "Open" | "In Progress" | "Resolved";
+export type ReportStatus = "Open" | "In Progress" | "Pending" | "Resolved";
 
 export type Report = {
   id: number;
@@ -13,6 +13,7 @@ export type Report = {
   status: ReportStatus;
   user_id: number;
   isDraft: boolean;
+  followUpAt?: string | null;
   /** Synthetic demo data for the App Challenge console */
   synthetic?: boolean;
 };
