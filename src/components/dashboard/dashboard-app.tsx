@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Clock, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, Clock, LogOut, RefreshCw, Search } from "lucide-react";
 import { StatusMetrics } from "@/components/dashboard/status-metrics";
 import { ReportsList } from "@/components/dashboard/reports-list";
 import { ReportsMapLazy } from "@/components/dashboard/reports-map-lazy";
@@ -41,7 +41,7 @@ import type {
 
 let demoUpdateSeq = 1000;
 
-export function DashboardApp() {
+export function DashboardApp({ onLogout }: { onLogout?: () => void } = {}) {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingDemo, setUsingDemo] = useState(false);
@@ -485,6 +485,19 @@ export function DashboardApp() {
             />
             Refresh
           </button>
+
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              aria-label="Sign out"
+              title="Sign out of DPW Portal"
+              className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-[#E5E7EB] bg-white px-3.5 text-[13px] font-semibold text-[#374151] transition-colors hover:border-[#FCA5A5] hover:bg-[#FEF2F2] hover:text-[#DC2626]"
+            >
+              <LogOut className="size-3.5" aria-hidden />
+              <span>Sign Out</span>
+            </button>
+          )}
           <span className="sr-only" aria-live="polite">
             {refreshing
               ? "Refreshing reports"
